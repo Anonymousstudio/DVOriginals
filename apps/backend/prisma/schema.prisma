@@ -1,0 +1,253 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // provider = "sqlite" // For development
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String?  // For admin users
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders    Order[]
+  addresses Address[]
+  wishlist  WishlistItem[]
+  likes     ProductLike[]
+  carts     Cart[]
+
+  @@map("users")
+}
+
+model Address {
+  id       String @id @default(cuid())
+  userId   String
+  name     String
+  phone    String
+  line1    String
+  line2    String?
+  city     String
+  state    String
+  country  String  @default("India")
+  pincode  String
+  isDefault Boolean @default(false)
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@map("addresses")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @db.Text
+  images      String[] // JSON array of image URLs
+  category    String
+  tags        String[] // JSON array of tags
+  isActive    Boolean  @default(true)
+  seoTitle    String?
+  seoDescription String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  providerMappings ProviderMapping[]
+  orderItems       OrderItem[]
+  wishlistItems    WishlistItem[]
+  likes            ProductLike[]
+  offerProducts    OfferProduct[]
+
+  @@map("products")
+}
+
+model ProviderMapping {
+  id                String      @id @default(cuid())
+  productId         String
+  provider          Provider
+  providerProductId String
+  providerVariantId String?
+  price             Float
+  cost              Float
+  isActive          Boolean     @default(true)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("provider_mappings")
+}
+
+model Order {
+  id               String      @id @default(cuid())
+  userId           String?
+  email            String
+  phone            String?
+  status           OrderStatus @default(PENDING)
+  subtotal         Float
+  shipping         Float       @default(0)
+  tax              Float       @default(0)
+  total            Float
+  paymentId        String?
+  providerOrderId  String?
+  shippingAddressId String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  user            User?         @relation(fields: [userId], references: [id])
+  shippingAddress Address?      @relation(fields: [shippingAddressId], references: [id])
+  items           OrderItem[]
+  webhookEvents   WebhookEvent[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String
+  productId String
+  quantity  Int
+  price     Float
+  provider  Provider
+  providerProductId String
+  providerVariantId String?
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+model Cart {
+  id        String   @id @default(cuid())
+  userId    String
+  items     Json     // CartItem[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("carts")
+}
+
+model WishlistItem {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("wishlist_items")
+}
+
+model ProductLike {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("product_likes")
+}
+
+model Offer {
+  id             String      @id @default(cuid())
+  title          String
+  description    String
+  type           OfferType
+  scope          OfferScope
+  value          Float       // Percentage or fixed amount
+  minOrderValue  Float?
+  maxDiscount    Float?
+  validFrom      DateTime
+  validTo        DateTime
+  isActive       Boolean     @default(true)
+  usageLimit     Int?
+  usedCount      Int         @default(0)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  products OfferProduct[]
+
+  @@map("offers")
+}
+
+model OfferProduct {
+  id        String @id @default(cuid())
+  offerId   String
+  productId String
+
+  offer   Offer   @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([offerId, productId])
+  @@map("offer_products")
+}
+
+model WebhookEvent {
+  id        String   @id @default(cuid())
+  orderId   String?
+  provider  Provider
+  event     String
+  data      Json
+  signature String?
+  processed Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  order Order? @relation(fields: [orderId], references: [id])
+
+  @@map("webhook_events")
+}
+
+model Settings {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String @db.Text
+  encrypted Boolean @default(false)
+
+  @@map("settings")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Provider {
+  PRINTROVE
+  PRINTFUL
+  PRINTIFY
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum OfferType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum OfferScope {
+  SITEWIDE
+  PRODUCT
+  CATEGORY
+}
